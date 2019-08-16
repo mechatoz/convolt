@@ -1,6 +1,6 @@
-# COLT: Convolutional Operator Learning Toolbox 
+# CONVOLT: CONVolutional Operator Learning Toolbox 
 
-The Convolutional Operator Learning Toolbox (COLT) – for Matlab – contains various fast and convergent algorithms that can train sparsifying filters associated with convolutional regularizers from large datasets. 
+The CONVolutional Operator Learning Toolbox (CONVOLT) – for Matlab – contains various fast and convergent algorithms that can train sparsifying filters associated with convolutional regularizers from large datasets. 
 
 ## Subdirectories (in alphabetical order):
 
