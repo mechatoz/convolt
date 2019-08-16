@@ -7,7 +7,7 @@ The Convolutional Operator Learning Toolbox (COLT) – for Matlab – contains v
 * `CAOL` algorithms for convolutional analysis operator learning (CAOL)
 * `CDL` algorithms for convolutional dictionary learning (CDL)
 * `dataset` datasets: Fruit, City
-* `image\_helpers` preprocessing toolbox
+* `image_helpers` preprocessing toolbox
 
 ## Relevant papers
 
