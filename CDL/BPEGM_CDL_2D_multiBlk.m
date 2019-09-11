@@ -1,5 +1,5 @@
 function [ d_res, z_res, Dz, obj_val, iterations ] = ...
-        BPEGM_CDL_2D_multiBlk(b, kernel_size, alpha, Md_type, Mz_type, ...
+        BPEGM_CDL_2D_multiBlk(x, size_kernel, alpha, Md_type, Mz_type, ...
         max_it, tol, verbose, init)     
      
 %| BPEGM_CDL_2D_multiBlk:
@@ -8,8 +8,8 @@ function [ d_res, z_res, Dz, obj_val, iterations ] = ...
 %| gradient-based restarting scheme (reG-BPEG-M, block multi-convex ver.)
 %|
 %| [Input]
-%| b: training images in sqrt(N) x sqrt(N) x L
-%| kernel_size: [psf_s, psf_s, K]
+%| x: training images in sqrt(N) x sqrt(N) x L
+%| size_kernel: [psf_s, psf_s, K]
 %| alpha: reg. param. for sparsifying regularizer (l1 term)
 %| Md_type: majorization matrix opt. for filter update -- 'I','D'
 %|         default: 'D' is Lem. 5.1 of DOI: 10.1109/TIP.2017.2761545
@@ -30,36 +30,36 @@ function [ d_res, z_res, Dz, obj_val, iterations ] = ...
 %| Note: BPEG-M here can be further accelerated by majorization design and 
 %| spatial implementation in the CAOL toolbox.
 %|
-%| Copyright 2019-08-13, Il Yong Chun, University of Hawaii
+%| Copyright 2019-09-10, Il Yong Chun, University of Hawaii
 %| alpha ver 2018-03-05, Il Yong Chun, University of Michigan
 
 
 %% Def: Parameters, Variables, and Operators
-psf_s = kernel_size(1);
-K = kernel_size(3);
-L = size(b,3);
+psf_s = size_kernel(1);
+K = size_kernel(3);
+L = size(x,3);
 
 %variables for filters
-center = floor([kernel_size(1), kernel_size(2)]/2) + 1;
+center = floor([size_kernel(1), size_kernel(2)]/2) + 1;
 psf_radius = floor( psf_s/2 );
 
 %variable dimensions
-size_xpad = [size(b,1) + psf_s-1, size(b,2) + psf_s-1, L];
+size_xpad = [size(x,1) + psf_s-1, size(x,2) + psf_s-1, L];
 size_z = [size_xpad(1), size_xpad(2), L, K];
 
 %Objective
-objective = @(z, dh) objectiveFunction( z, dh, b, alpha, ...
+objective = @(z, dh) objectiveFunction( z, dh, x, alpha, ...
     psf_radius, center, psf_s, size_z, size_xpad );
 
 %Operator for padding/unpadding to filters
-PS = @(u) dpad_to_d(u, center, kernel_size);
-PSt = @(u) d_to_dpad(u, size_xpad, kernel_size, center);
+PS = @(u) dpad_to_d(u, center, size_kernel);
+PSt = @(u) d_to_dpad(u, size_xpad, size_kernel, center);
 
 %Proximal operator for l1 norm
 ProxSparseL1 = @(u, a) sign(u) .* max( abs(u)-a, 0 );
 
 %Mask and padded data
-[PBtPB, PBtb] = pad_data(b, center(1), psf_s);
+[PBtPB, PBtx] = pad_data(x, center(1), psf_s);
 
 %Adaptive restarting: Cos(ang), ang: the angle between two vectors
 omega = cos(pi*95/180);   
@@ -71,7 +71,7 @@ if ~isempty(init.d)
     d = init.d;
 else
     %Random initialization
-    d = randn(kernel_size);
+    d = randn(size_kernel);
 end
 %filter normalization
 dnorm = @(x) bsxfun(@rdivide, x, sqrt(sum(sum(x.^2, 1), 2)));
@@ -92,15 +92,15 @@ else
         for k = 1:K
             %circular padding
             if mod(psf_s,2) == 0
-                bpad = padarray(b(:,:,l), [center(1)-1, center(2)-1], 'circular', 'both');    %circular pad
-                bpad = bpad(1:end-1, 1:end-1, :, :);
+                xpad = padarray(x(:,:,l), [center(1)-1, center(2)-1], 'circular', 'both');    %circular pad
+                xpad = xpad(1:end-1, 1:end-1, :, :);
             else
-                bpad = padarray(b(:,:,l), [center(1)-1, center(2)-1], 'circular', 'both');    %circular pad
+                xpad = padarray(x(:,:,l), [center(1)-1, center(2)-1], 'circular', 'both');    %circular pad
             end 
-            z(:,:,l,k) = ProxSparseL1(bpad, alpha) / K;
+            z(:,:,l,k) = ProxSparseL1(xpad, alpha) / K;
             %zero padding
-            %z(:,:,l,k) = ProxSparseL1(PBtb(:,:,l), alpha) / K;
-            %z(:,:,l,k) = PBtb(:,:,l) .* ( abs(PBtb(:,:,l)) >= alpha ) / K;
+            %z(:,:,l,k) = ProxSparseL1(PBtx(:,:,l), alpha) / K;
+            %z(:,:,l,k) = PBtx(:,:,l) .* ( abs(PBtx(:,:,l)) >= alpha ) / K;
         end
     end
 end
@@ -109,7 +109,7 @@ z_p = z;
 
 %ETC
 Akdkzk_mat = Ak_for_dkzk_mat( d_hat, z_hat, PBtPB, size_z );
-Mdk = zeros(kernel_size);
+Mdk = zeros(size_kernel);
 Mzk = zeros(size_z(1), size_z(2), size_z(4));
 tau = 1;            %momentum coeff.
 weight = 1-eps;     %delta in Prop. 3.2 of DOI: 10.1109/TIP.2017.2761545
@@ -135,7 +135,7 @@ fprintf('Iter %d, Obj %3.3g, Diff %5.5g\n', 0, obj_val, 0)
 if verbose == true
     iterate_fig = figure();
     filter_fig = figure();
-    display_func(iterate_fig, filter_fig, d, d_hat, z_hat, b, size_xpad, size_z, psf_radius, 0);
+    display_func(iterate_fig, filter_fig, d, d_hat, z_hat, x, size_xpad, size_z, psf_radius, 0);
 end
 
 
@@ -158,10 +158,10 @@ for i = 1:max_it
         %Compute majorization matrices
         tic; %timing
         if i==1
-           Mdk(:,:,k) = maj_for_dk( zk_hat, Md_type, kernel_size, PS, PSt );  
+           Mdk(:,:,k) = maj_for_dk( zk_hat, Md_type, size_kernel, PS, PSt );  
         else
            Mdk_old = Mdk(:,:,k);
-           Mdk(:,:,k) = maj_for_dk( zk_hat, Md_type, kernel_size, PS, PSt );  
+           Mdk(:,:,k) = maj_for_dk( zk_hat, Md_type, size_kernel, PS, PSt );  
         end
         t_kernel_maj = toc; %timing
         
@@ -185,11 +185,11 @@ for i = 1:max_it
         %Proximal mapping
         d_old(:,:,k) = d(:,:,k);
         Akdkzk_mat(:,:,:,k) = 0;
-        PBtb_k = PBtb - sum(Akdkzk_mat, 4);    
+        PBtx_k = PBtx - sum(Akdkzk_mat, 4);    
         if i == 1
-            d(:,:,k) = ProxKernelConstraint( d_p(:,:,k) - Ah( A(d_p(:,:,k)) - PBtb_k ) ./ Mdk(:,:,k) );
+            d(:,:,k) = ProxKernelConstraint( d_p(:,:,k) - Ah( A(d_p(:,:,k)) - PBtx_k ) ./ Mdk(:,:,k) );
         else
-            d(:,:,k) = ProxKernelConstraint( d_p - Ah( A(d_p) - PBtb_k ) ./ Mdk(:,:,k) );
+            d(:,:,k) = ProxKernelConstraint( d_p - Ah( A(d_p) - PBtx_k ) ./ Mdk(:,:,k) );
         end
         
         %Gradient-based adaptive restarting
@@ -200,7 +200,7 @@ for i = 1:max_it
             dp_d_diff = d_p-d(:,:,k);
         end
         if dot( dp_d_diff(:), Mdk_diff(:) ) / ( norm(dp_d_diff(:)) * norm(Mdk_diff(:)) ) > omega
-            d(:,:,k) = ProxKernelConstraint( d_old(:,:,k) - Ah( A(d_old(:,:,k)) - PBtb_k ) ./ Mdk(:,:,k) );
+            d(:,:,k) = ProxKernelConstraint( d_old(:,:,k) - Ah( A(d_old(:,:,k)) - PBtx_k ) ./ Mdk(:,:,k) );
             disp('Restarted!');
         end
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -240,12 +240,12 @@ for i = 1:max_it
         %Proximal mapping
         z_old(:,:,:,k) = z(:,:,:,k);
         Akdkzk_mat(:,:,:,k) = 0;
-        PBtb_k = PBtb - sum(Akdkzk_mat, 4);
+        PBtx_k = PBtx - sum(Akdkzk_mat, 4);
         if i == 1
-            z(:,:,:,k) = ProxSparseL1( z_p(:,:,:,k) - Ah( A(z_p(:,:,:,k)) - PBtb_k ) ./ repmat(Mzk(:,:,k),[1,1,L]), ...
+            z(:,:,:,k) = ProxSparseL1( z_p(:,:,:,k) - Ah( A(z_p(:,:,:,k)) - PBtx_k ) ./ repmat(Mzk(:,:,k),[1,1,L]), ...
                 alpha ./ repmat(Mzk(:,:,k),[1,1,L]) );
         else
-            z(:,:,:,k) = ProxSparseL1( z_p - Ah( A(z_p) - PBtb_k ) ./ repmat(Mzk(:,:,k),[1,1,L]), ...
+            z(:,:,:,k) = ProxSparseL1( z_p - Ah( A(z_p) - PBtx_k ) ./ repmat(Mzk(:,:,k),[1,1,L]), ...
                 alpha ./ repmat(Mzk(:,:,k),[1,1,L]) );
         end
 
@@ -257,7 +257,7 @@ for i = 1:max_it
             zp_z_diff = z_p-z(:,:,:,k);
         end
         if dot( zp_z_diff(:), Mzk_diff(:) ) / ( norm(zp_z_diff(:)) * norm(Mzk_diff(:)) ) > omega
-            z(:,:,:,k) = ProxSparseL1( z_old(:,:,:,k) - Ah( A(z_old(:,:,:,k)) - PBtb_k ) ./ repmat(Mzk(:,:,k),[1,1,L]), ...
+            z(:,:,:,k) = ProxSparseL1( z_old(:,:,:,k) - Ah( A(z_old(:,:,:,k)) - PBtx_k ) ./ repmat(Mzk(:,:,k),[1,1,L]), ...
                    alpha ./ repmat(Mzk(:,:,k),[1,1,L]) );
             disp('Restarted!');
         end
@@ -297,7 +297,7 @@ for i = 1:max_it
     %Display filters
     if verbose == true        
         if mod(i,25) == 0
-            display_func(iterate_fig, filter_fig, d, d_hat, z_hat, b, size_xpad, size_z, psf_radius, i);
+            display_func(iterate_fig, filter_fig, d, d_hat, z_hat, x, size_xpad, size_z, psf_radius, i);
         end
     end
 
@@ -322,34 +322,34 @@ return;
 
 %%%%%%%%%%%%%%%%%%%% Def: Padding Operators %%%%%%%%%%%%%%%%%%%%
 
-function d = dpad_to_d(dpad, center, kernel_size)
+function d = dpad_to_d(dpad, center, size_kernel)
 
 %pad to filters (for multiple filters)
 d = circshift(dpad, -[1-center(1), 1-center(2), 0]);
-d = d( 1:kernel_size(1), 1:kernel_size(2), : );
+d = d( 1:size_kernel(1), 1:size_kernel(2), : );
 
 return;
 
 
-function dpad = d_to_dpad(d, size_xpad, kernel_size, center)
+function dpad = d_to_dpad(d, size_xpad, size_kernel, center)
 
 %remove padding from filters (for multiple filters)
-dpad = padarray( d, [size_xpad(1)-kernel_size(1), size_xpad(2)-kernel_size(2), 0], 0, 'post' );
+dpad = padarray( d, [size_xpad(1)-size_kernel(1), size_xpad(2)-size_kernel(2), 0], 0, 'post' );
 dpad = circshift(dpad, [1-center(1), 1-center(2), 0]);
 
 return;
 
 
-function [MtM, Mtb] = pad_data(b, center, psf_s)
+function [MtM, Mtx] = pad_data(x, center, psf_s)
 
 if mod(psf_s,2) == 0
-    MtM = padarray(ones(size(b)), [center-1, center-1, 0], 0, 'both');    %mask
+    MtM = padarray(ones(size(x)), [center-1, center-1, 0], 0, 'both');    %mask
     MtM = MtM(1:end-1, 1:end-1, :);
-    Mtb = padarray(b, [center-1, center-1, 0], 0, 'both');    %padded b
-    Mtb = Mtb(1:end-1, 1:end-1, :);
+    Mtx = padarray(x, [center-1, center-1, 0], 0, 'both');    %padded x
+    Mtx = Mtx(1:end-1, 1:end-1, :);
 else
-    MtM = padarray(ones(size(b)), [center-1, center-1, 0], 0, 'both');    %mask
-    Mtb = padarray(b, [center-1, center-1, 0], 0, 'both');    %padded b
+    MtM = padarray(ones(size(x)), [center-1, center-1, 0], 0, 'both');    %mask
+    Mtx = padarray(x, [center-1, center-1, 0], 0, 'both');    %padded x
 end
         
 return;
@@ -411,10 +411,10 @@ return;
 
 %%%%%%%%%%%%%%%%%%%% Design: Majorization Matrices %%%%%%%%%%%%%%%%%%%%
 
-function Mdk = maj_for_dk( zk_hat, Md_type, kernel_size, PS, PSt )  
+function Mdk = maj_for_dk( zk_hat, Md_type, size_kernel, PS, PSt )  
 % Compute majorizer for filter updates
 
-dy = kernel_size(1); dx = kernel_size(2);   %size
+dy = size_kernel(1); dx = size_kernel(2);   %size
 
 if strcmp( Md_type, 'I')
     %Scaled identity majorization matrix
@@ -528,7 +528,7 @@ return;
 
 %%%%%%%%%%%%%%%%%%%% MISC %%%%%%%%%%%%%%%%%%%%
 
-function f_val = objectiveFunction( z, d_hat, b, alpha, psf_radius, center, psf_s, size_z, size_xpad )
+function f_val = objectiveFunction( z, d_hat, x, alpha, psf_radius, center, psf_s, size_z, size_xpad )
     
     sy = size_z(1); sx = size_z(2); L = size_z(3); K = size_z(4);   %size
 
@@ -538,9 +538,9 @@ function f_val = objectiveFunction( z, d_hat, b, alpha, psf_radius, center, psf_
     
     if mod(psf_s,2) == 0
         f_z = 0.5 * norm( reshape( Dz(center(1):end - (psf_s-center(1)), ...
-            center(2):end - (psf_s-center(2)), :) - b, [], 1) , 2 )^2;
+            center(2):end - (psf_s-center(2)), :) - x, [], 1) , 2 )^2;
     else        
-        f_z = 0.5 * norm( reshape( Dz(1 + psf_radius:end - psf_radius,1 + psf_radius:end - psf_radius,:) - b, [], 1) , 2 )^2;
+        f_z = 0.5 * norm( reshape( Dz(1 + psf_radius:end - psf_radius,1 + psf_radius:end - psf_radius,:) - x, [], 1) , 2 )^2;
     end    
     g_z = alpha * sum( abs( z(:) ), 1 );
     
@@ -550,7 +550,7 @@ function f_val = objectiveFunction( z, d_hat, b, alpha, psf_radius, center, psf_
 return;
 
 
-function [] = display_func(iterate_fig, filter_fig, d, d_hat, z_hat, b, size_xpad, size_z, psf_radius, iter)
+function [] = display_func(iterate_fig, filter_fig, d, d_hat, z_hat, x, size_xpad, size_z, psf_radius, iter)
 
     sy = size_z(1); sx = size_z(2); L = size_z(3); K = size_z(4);   %size
 
@@ -558,11 +558,11 @@ function [] = display_func(iterate_fig, filter_fig, d, d_hat, z_hat, b, size_xpa
     Dz = real(ifft2( reshape(sum(repmat(d_hat,[1,1,1,L]) .* permute(z_hat,[1,2,4,3]), 3), size_xpad) ));
     Dz = Dz(1 + psf_radius:end - psf_radius,1 + psf_radius:end - psf_radius,:);
 
-    subplot(3,2,1), imagesc(b(:,:,1));  axis image, colormap gray; colorbar; title('Orig');
+    subplot(3,2,1), imagesc(x(:,:,1));  axis image, colormap gray; colorbar; title('Orig');
     subplot(3,2,2), imagesc(Dz(:,:,1)); axis image, colormap gray; colorbar; title(sprintf('Local iterate %d',iter));
-    subplot(3,2,3), imagesc(b(:,:,3));  axis image, colormap gray; colorbar;
+    subplot(3,2,3), imagesc(x(:,:,3));  axis image, colormap gray; colorbar;
     subplot(3,2,4), imagesc(Dz(:,:,3)); axis image, colormap gray; colorbar;
-    subplot(3,2,5), imagesc(b(:,:,7));  axis image, colormap gray; colorbar;
+    subplot(3,2,5), imagesc(x(:,:,7));  axis image, colormap gray; colorbar;
     subplot(3,2,6), imagesc(Dz(:,:,7)); axis image, colormap gray; colorbar;
     drawnow;
 
