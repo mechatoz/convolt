@@ -1,6 +1,6 @@
 function [ d_res, z_res, Dz, obj_val, iterations ] = ...
-        BPEGM_CDL_2D_twoBlk( x, size_kernel, alpha, Md_type, Mz_type, ...
-        max_it, tol, verbose, init )
+        BPEGM_CDL_2D_twoBlk( x, size_kernel, alpha, arcdegree, ...
+        Md_type, Mz_type, max_it, tol, verbose, init )
     
 %| BPEGM_CDL_2D_twoBlk:
 %| Two-block ver. Convolutional Dictionary Learning (CDL) via 
@@ -11,13 +11,15 @@ function [ d_res, z_res, Dz, obj_val, iterations ] = ...
 %| x: training images in sqrt(N) x sqrt(N) x L
 %| size_kernel: [psf_s, psf_s, K]
 %| alpha: reg. param. for sparsifying regularizer (l1 term)
-%| Md_type: majorization matrix option for filter update -- 'I','D','Dtgt'
-%|         'D' is Lem. 5.1 in DOI: 10.1109/TIP.2017.2761545
-%| Mz_type: majorizaiton matrix option for sparse code update -- 'D','Dtgt'
-%|         'D' is Lem. 5.2 in DOI: 10.1109/TIP.2017.2761545
+%| arcdegree: param. for gradient-based restarting, within [90,100] -- 
+%|            a larger value leads to more frequent restarting 
+%| Md_type: majorization matrix option for filter update, 'I','D','Dtgt'
+%|          (default: 'D' in Lem. 4.4 of DOI: 10.1109/TIP.2017.2761545)
+%| Mz_type: majorization matrix option for sparse code update, 'D','Dtgt'
+%|          (default: 'D' in Lem. 4.5 of DOI: 10.1109/TIP.2017.2761545)
 %| max_it: max number of iterations
 %| tol: tolerance value for the relative difference stopping criterion
-%| verbose: option to show updated filters
+%| verbose: option to show intermidiate results
 %| init: initial values for filters, sparse codes
 %|
 %| [Output]
@@ -32,21 +34,17 @@ function [ d_res, z_res, Dz, obj_val, iterations ] = ...
            
 
 %% Def: Parameters, Variables, and Operators
-psf_s = size_kernel(1);
-K = size_kernel(3);
-L = size(x,3);
+K = size_kernel(3);     %number of filters
+L = size(x,3);          %number of training images
 
 %variables for filters
+psf_s = size_kernel(1);
 center = floor([size_kernel(1), size_kernel(2)]/2) + 1;
 psf_radius = floor( psf_s/2 );
 
-%variable dimensions
+%dimensions of padded training images and sparse codes
 size_xpad = [size(x,1) + psf_s-1, size(x,2) + psf_s-1, L];
 size_z = [size_xpad(1), size_xpad(2), K, L];
-
-%Objective
-objective = @(z, dh) objectiveFunction( z, dh, x, alpha, ...
-    psf_radius, center, psf_s, size_z, size_xpad );
 
 %Operator for padding/unpadding to filters
 PS = @(u) dpad_to_d(u, center, size_kernel);
@@ -58,8 +56,12 @@ ProxSparseL1 = @(u, a) sign(u) .* max( abs(u)-a, 0 );
 %Mask and padded data
 [PBtPB, PBtx] = pad_data(x, center(1), psf_s);
 
-%Adaptive restarting: Cos(ang), ang: the angle between two vectors
-omega = cos(pi*95/180);   
+%Adaptive restarting: Cos(theta), theta: angle between two vectors (rad)
+omega = cos(pi*arcdegree/180);   
+
+%Objective
+objective = @(z, dh) objectiveFunction( z, dh, x, alpha, ...
+    psf_radius, center, psf_s, size_z, size_xpad );
 
 
 %% Initialization
@@ -124,7 +126,7 @@ iterations.it_vals = cat(4, iterations.it_vals, d );
 %Debug progress
 fprintf('Iter %d, Obj %3.3g, Diff %5.5g\n', 0, obj_val, 0)
 
-%Display filters
+%Display initializations 
 if verbose == 1
     iterate_fig = figure();
     filter_fig = figure();
@@ -260,7 +262,7 @@ for i = 1:max_it
         iterations.d = cat(4, iterations.d, d );
     end
     
-    %Display filters
+    %Display intermediate results 
     if verbose == 1
         if mod(i,25) == 0
             display_func(iterate_fig, filter_fig, d, d_hat, z_hat, b, size_xpad, size_z, psf_radius, i);
@@ -268,8 +270,8 @@ for i = 1:max_it
     end
     
     %Termination
-    if d_relErr < tol && z_relErr < tol
-         disp('relErr reached');      
+    if (d_relErr < tol) && (z_relErr < tol) && (i > 1)
+        disp('relErr reached');      
         break;
     end
     
@@ -290,7 +292,7 @@ return;
 
 function d = dpad_to_d(dpad, center, size_kernel)
 
-%pad to filters (for multiple filters)
+%unpad filters (for multiple filters)
 d = circshift(dpad, -[1-center(1), 1-center(2), 0]);
 d = d( 1:size_kernel(1), 1:size_kernel(2), : );
 
@@ -299,7 +301,7 @@ return;
 
 function dpad = d_to_dpad(d, size_xpad, size_kernel, center)
 
-%remove padding from filters (for multiple filters)
+%pad filters (for multiple filters)
 dpad = padarray( d, [size_xpad(1)-size_kernel(1), size_xpad(2)-size_kernel(2), 0], 0, 'post' );
 dpad = circshift(dpad, [1-center(1), 1-center(2), 0]);
 
