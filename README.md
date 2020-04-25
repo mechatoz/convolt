@@ -15,7 +15,7 @@ The CONVolutional Operator Learning Toolbox (CONVOLT) – for Matlab – contain
 
 * Il Yong Chun and Jeffrey A. Fessler, 
 "Convolutional analysis operator learning: Acceleration and convergence," 
-*IEEE Trans. Image Process.*, 29(1):2108–2122, 2020. 
+*IEEE Trans. Image Process.*, 29:2108–2122, 2020. 
 [arXiv](http://arxiv.org/abs/1802.05584), [doi](http://dx.doi.org/10.1109/TIP.2019.2937734)
 * Il Yong Chun<sup>\*</sup>, David Hong<sup>\*</sup>, Ben Adcock, and Jeffrey A. Fessler,
 "Convolutional analysis operator learning: Dependence on training data,"
