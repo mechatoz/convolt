@@ -34,8 +34,7 @@ function [folders,files] = split_folders_files(input)
 %     end
 
 B = struct2cell(input); 
-B
-dirs = cell2mat(B(4,:)); 
+dirs = cell2mat(B(5,:)); 
 folders = input(logical(dirs)); 
 files = input(~logical(dirs));
 
