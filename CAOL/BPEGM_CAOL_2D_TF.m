@@ -265,7 +265,7 @@ function [M, bpad] = PadFunc(b, psf_radius)
     
 M = padarray(ones(size(b)), [psf_radius(1), psf_radius(2), 0], 0, 'both');    %mask
 %%%circular padding
-bpad = padarray(b, [psf_radius, psf_radius, 0], 'circular', 'both');
+bpad = padarray(b, [psf_radius(1), psf_radius(2), 0], 'circular', 'both');
 %%%reflective padding
 % bpad = padarray(b, [psf_radius(1), psf_radius(2), 0], 'symmetric', 'both');     
 %%%%zero padding
