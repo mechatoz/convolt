@@ -265,7 +265,7 @@ for i = 1:max_it
     %Display intermediate results 
     if verbose == 1
         if mod(i,25) == 0
-            display_func(iterate_fig, filter_fig, d, d_hat, z_hat, b, size_xpad, size_z, psf_radius, i);
+            display_func(iterate_fig, filter_fig, d, d_hat, z_hat, x, size_xpad, size_z, psf_radius, i);
         end
     end
     
